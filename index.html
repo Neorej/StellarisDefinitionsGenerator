@@ -1,0 +1,675 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Stellaris Definitions Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="jszip.min.js"></script>
+    <script src="lib/definitionParser.js"></script>
+    <script src="lib/ethicsBuilder.js"></script>
+    <script src="lib/civicsBuilder.js"></script>
+    <script src="lib/originsBuilder.js"></script>
+    <script src="lib/traitsBuilder.js"></script>
+</head>
+<body>
+<h1>Stellaris Definition Generator</h1>
+<div class="controls">
+    <p>A tool for generating definitions for the <a href="https://github.com/Neorej/StellarisEmpireGenerator" target="_blank" rel="noopener noreferrer">Stellaris Empire Generator</a>.</p>
+    <label for="fileUpload">Zip the Stellaris "common" directory and upload it here to extract ethics, civics, origins, and traits definitions.</label><br>
+    <input type="file" id="fileUpload" accept=".zip" />
+    <button id="processBtn">Process ZIP</button>
+    <button id="downloadAllBtn" disabled>Download All</button>
+</div>
+
+<div class="sections-grid">
+<section
+>
+    <h2>Ethics</h2>
+    <div class="button-group">
+        <button class="copyBtn" data-target="ethicsOutput">Copy</button>
+        <button class="downloadBtn" data-target="ethicsOutput" data-filename="ethics.js">Download</button>
+    </div>
+    <pre id="ethicsOutput">No ethics yet.</pre>
+</section>
+
+<section>
+    <h2>Civics</h2>
+    <div class="button-group">
+        <button class="copyBtn" data-target="allCivicsOutput">Copy</button>
+        <button class="downloadBtn" data-target="allCivicsOutput" data-filename="civics.js">Download</button>
+    </div>
+    <pre id="allCivicsOutput">No civics yet.</pre>
+</section>
+
+<section>
+    <h2>Origins</h2>
+    <div class="button-group">
+        <button class="copyBtn" data-target="originsOutput">Copy</button>
+        <button class="downloadBtn" data-target="originsOutput" data-filename="origins.js">Download</button>
+    </div>
+    <pre id="originsOutput">No origins yet.</pre>
+</section>
+
+<section>
+    <h2>Traits</h2>
+    <div class="button-group">
+        <button class="copyBtn" data-target="allTraitsOutput">Copy</button>
+        <button class="downloadBtn" data-target="allTraitsOutput" data-filename="traits.js">Download</button>
+    </div>
+    <pre id="allTraitsOutput">No traits yet.</pre>
+</section>
+</div>
+
+<script>
+    document.getElementById('processBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('fileUpload');
+        const outputEl = document.getElementById('output');
+        const ethicsEl = document.getElementById('ethicsOutput');
+        const file = fileInput.files[0];
+
+        if (!file) {
+            outputEl.textContent = "Please select a ZIP file.";
+            return;
+        }
+
+        try {
+            const zip = await JSZip.loadAsync(file);
+            const parser = new ParadoxParser();
+
+            const ethicsFile = zip.files['common/ethics/00_ethics.txt'];
+            const authFile   = zip.files['common/governments/authorities/00_authorities.txt'];
+
+            const parsedEthics = ethicsFile ? await parser.parseFile(ethicsFile) : {};
+            const parsedAuths  = authFile   ? await parser.parseFile(authFile)   : {};
+            const builder = new EthicsBuilder();
+            const ethicsDefs = builder.build(parsedEthics, parsedAuths);
+
+            ethicsEl.textContent = "basegame_ethics = " + JSON.stringify(ethicsDefs, null, 2);
+
+            const civicsFile = zip.files['common/governments/civics/00_civics.txt'];
+            const parsedCivics = civicsFile ? await parser.parseFile(civicsFile) : {};
+            const civicsBuilder = new CivicsBuilder();
+            const civicsDefs = civicsBuilder.build(parsedCivics);
+
+            // Parse hive civics from 02_gestalt_civics.txt
+            const gestaltFile = zip.files['common/governments/civics/02_gestalt_civics.txt'];
+            const parsedGestalt = gestaltFile ? await parser.parseFile(gestaltFile) : {};
+            
+            // Filter for civics with "hive" in the name
+            const hiveCivicsDefs = civicsBuilder.build(parsedGestalt, (civicName) => {
+                return civicName.toLowerCase().includes('hive');
+            });
+
+            // Parse machine civics from 02_gestalt_civics.txt (same file as hive)
+            // Filter for civics with "machine" in the name
+            const machineCivicsDefs = civicsBuilder.build(parsedGestalt, (civicName) => {
+                return civicName.toLowerCase().includes('machine');
+            });
+
+            // Parse corporate civics from 03_corporate_civics.txt
+            const corporateFile = zip.files['common/governments/civics/03_corporate_civics.txt'];
+            const parsedCorporate = corporateFile ? await parser.parseFile(corporateFile) : {};
+            
+            // No filter needed - all civics in this file are corporate
+            const corporateCivicsDefs = civicsBuilder.build(parsedCorporate);
+
+            // Helper function to check if a civic is individualistic machine
+            const isIndividualisticMachine = (civicName, civicData) => {
+                // Check if name contains "individual"
+                if (civicName.toLowerCase().includes('individual')) {
+                    return true;
+                }
+                
+                // Check if requires MACHINE species_archetype AND forbids gestalt consciousness
+                let requiresMachine = false;
+                let forbidsGestalt = false;
+                
+                // Check potential block
+                if (civicData.potential) {
+                    if (civicData.potential.species_archetype) {
+                        const archetype = civicData.potential.species_archetype;
+                        if (archetype.value === 'MACHINE') {
+                            requiresMachine = true;
+                        }
+                    }
+                    if (civicData.potential.ethics) {
+                        const ethics = civicData.potential.ethics;
+                        if (ethics.NOT) {
+                            const notEthics = Array.isArray(ethics.NOT) ? ethics.NOT : [ethics.NOT];
+                            for (const notEthic of notEthics) {
+                                if (notEthic.value === 'ethic_gestalt_consciousness' || notEthic === 'ethic_gestalt_consciousness') {
+                                    forbidsGestalt = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Check possible block
+                if (civicData.possible) {
+                    if (civicData.possible.species_archetype) {
+                        const archetype = civicData.possible.species_archetype;
+                        if (archetype.value === 'MACHINE') {
+                            requiresMachine = true;
+                        }
+                    }
+                    if (civicData.possible.ethics) {
+                        const ethics = civicData.possible.ethics;
+                        if (ethics.NOT) {
+                            const notEthics = Array.isArray(ethics.NOT) ? ethics.NOT : [ethics.NOT];
+                            for (const notEthic of notEthics) {
+                                if (notEthic.value === 'ethic_gestalt_consciousness' || notEthic === 'ethic_gestalt_consciousness') {
+                                    forbidsGestalt = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                return requiresMachine && forbidsGestalt;
+            };
+            
+            // Parse individualistic machines
+            const individualisticFromBaseline = Object.entries(parsedCivics)
+                .filter(([civicName, civicData]) => isIndividualisticMachine(civicName, civicData))
+                .map(([civicName]) => civicName);
+            
+            const individualisticFromCorporate = Object.entries(parsedCorporate)
+                .filter(([civicName, civicData]) => isIndividualisticMachine(civicName, civicData))
+                .map(([civicName]) => civicName);
+            
+            // Merge both arrays and remove duplicates
+            const individualisticMachines = [...new Set([...individualisticFromBaseline, ...individualisticFromCorporate])];
+
+            // Combine all 5 civic objects into one output
+            const allCivicsEl = document.getElementById('allCivicsOutput');
+            let allCivicsOutput = '';
+            allCivicsOutput += "basegame_civics = " + JSON.stringify(civicsDefs, null, 2) + "\n\n";
+            allCivicsOutput += "hive_civics = " + JSON.stringify(hiveCivicsDefs, null, 2) + "\n\n";
+            allCivicsOutput += "machine_civics = " + JSON.stringify(machineCivicsDefs, null, 2) + "\n\n";
+            allCivicsOutput += "corporate_civics = " + JSON.stringify(corporateCivicsDefs, null, 2) + "\n\n";
+            allCivicsOutput += "individualistic_machines = " + JSON.stringify(individualisticMachines, null, 2);
+            allCivicsEl.textContent = allCivicsOutput;
+
+            // Parse trait files first (needed for origins trait inheritance)
+            const traitsFile = zip.files['common/traits/04_species_traits.txt'];
+            const parsedTraits = traitsFile ? await parser.parseFile(traitsFile) : {};
+            
+            // Parse basic characteristics traits
+            const basicCharFile = zip.files['common/traits/02_species_traits_basic_characteristics.txt'];
+            const parsedBasicChar = basicCharFile ? await parser.parseFile(basicCharFile) : {};
+            
+            // Parse robotic traits
+            const roboticTraitsFile = zip.files['common/traits/05_species_traits_robotic.txt'];
+            const parsedRoboticTraits = roboticTraitsFile ? await parser.parseFile(roboticTraitsFile) : {};
+            
+            // Parse toxoid traits
+            const toxTraitsFile = zip.files['common/traits/09_tox_traits.txt'];
+            const parsedToxTraits = toxTraitsFile ? await parser.parseFile(toxTraitsFile) : {};
+            
+            // Parse machine age traits
+            const machineAgeTraitsFile = zip.files['common/traits/13_machine_age_traits.txt'];
+            const parsedMachineAgeTraits = machineAgeTraitsFile ? await parser.parseFile(machineAgeTraitsFile) : {};
+
+            // Parse origins from 00_origins.txt
+            const originsEl = document.getElementById('originsOutput');
+            const originsFile = zip.files['common/governments/civics/00_origins.txt'];
+            const parsedOrigins = originsFile ? await parser.parseFile(originsFile) : {};
+            
+            // Create traits lookup map for origin trait inheritance
+            // This allows origins to inherit requirements from force-added traits
+            const traitsLookup = {
+                ...parsedBasicChar,
+                ...parsedTraits,
+                ...parsedRoboticTraits,
+                ...parsedToxTraits,
+                ...parsedMachineAgeTraits
+            };
+            
+            // Collect all civic files for origin incompatibility checking
+            // This allows origins to find civics that forbid them
+            const civicsFilesForOrigins = [
+                parsedCivics,
+                parsedGestalt,
+                parsedCorporate
+            ];
+
+            // Use OriginsBuilder which handles species_class (in addition to species_archetype)
+            const originsBuilder = new OriginsBuilder();
+            const originsDefs = originsBuilder.build(parsedOrigins, null, traitsLookup, civicsFilesForOrigins);
+
+            originsEl.textContent = "basegame_origins = " + JSON.stringify(originsDefs, null, 2);
+
+            // Continue with traits processing
+            const traitsBuilder = new TraitsBuilder();
+            
+            // Apply bidirectional incompatibilities to the full parsed data BEFORE filtering
+            // This ensures that traits filtered into different categories still have correct bidirectional opposites
+            traitsBuilder.applyBidirectionalToParsedData(parsedTraits);
+            traitsBuilder.applyBidirectionalToParsedData(parsedToxTraits);
+            
+            // Merge parsed data from both files
+            const mergedParsedTraits = { ...parsedTraits, ...parsedToxTraits };
+            
+            // Filter for traits WITHOUT species_class AND not ONLY for lithoids
+            // This includes traits with allowed_archetypes = { BIOLOGICAL LITHOID }
+            // Also exclude traits with allowed_origins (those go to overtuned_traits)
+            const traitsDefs = traitsBuilder.build(mergedParsedTraits, (id, data) => {
+                // Exclude traits with allowed_origins
+                if (data.allowed_origins) {
+                    return false;
+                }
+                // Include traits without species_class AND not ONLY for lithoids
+                return !data.species_class && !traitsBuilder.isOnlyForArchetypes(data, ['LITHOID']);
+            });
+
+            // Parse plant/fungoid traits (species_class = PLANT or FUN)
+            const plantTraitsDefs = traitsBuilder.build(parsedTraits, (id, data) => {
+                return traitsBuilder.hasSpeciesClass(data, ['PLANT', 'FUN']);
+            });
+
+            // Parse lithoid traits (allowed_archetypes includes LITHOID)
+            // BUT exclude traits with species_class that doesn't include LITHOID
+            const lithoidTraitsDefs = traitsBuilder.build(parsedTraits, (id, data) => {
+                // Must have LITHOID in allowed_archetypes
+                if (!traitsBuilder.hasAllowedArchetype(data, 'LITHOID')) {
+                    return false;
+                }
+                
+                // If species_class exists, it must either be empty or include LITHOID
+                if (data.species_class) {
+                    const speciesClasses = Array.isArray(data.species_class) ? data.species_class : [data.species_class];
+                    // Check if LITHOID is in the species_class list
+                    return speciesClasses.includes('LITHOID');
+                }
+                
+                // No species_class restriction, so it's valid for lithoids
+                return true;
+            });
+
+            const oceanTraitsDefs = traitsBuilder.build(parsedBasicChar, (id, data) => {
+                return id === 'trait_aquatic';
+            });
+            
+            // Add hardcoded incompatibility with trait_cave_dweller
+            if (oceanTraitsDefs['trait_aquatic']) {
+                if (!oceanTraitsDefs['trait_aquatic'].no.includes('trait_cave_dweller')) {
+                    oceanTraitsDefs['trait_aquatic'].no.push('trait_cave_dweller');
+                }
+            }
+
+            // Parse overtuned traits from 09_tox_traits.txt
+            const overtunedTraitsDefs = traitsBuilder.build(parsedToxTraits, (id, data) => {
+                if (data.allowed_origins) {
+                    const allowedOrigins = Array.isArray(data.allowed_origins) ? data.allowed_origins : [data.allowed_origins];
+                    return allowedOrigins.includes('origin_overtuned');
+                }
+                return false;
+            });
+
+            // Parse syncretic disabled traits (opposites of trait_syncretic_proles)
+            const syncreticDisabledTraits = [];
+            if (parsedBasicChar['trait_syncretic_proles']) {
+                const syncreticProles = parsedBasicChar['trait_syncretic_proles'];
+                if (syncreticProles.opposites) {
+                    const opposites = Array.isArray(syncreticProles.opposites) 
+                        ? syncreticProles.opposites 
+                        : [syncreticProles.opposites];
+                    syncreticDisabledTraits.push(...opposites);
+                }
+            }
+
+            // Filter to exclude cost = 0 traits (background traits)
+            const machineTraitsDefs = traitsBuilder.build(parsedRoboticTraits, (id, data) => {
+                if (data.cost !== undefined) {
+                    if (typeof data.cost === 'number') {
+                        return data.cost !== 0;
+                    } else if (typeof data.cost === 'object' && data.cost.base !== undefined) {
+                        return parseInt(data.cost.base) !== 0;
+                    }
+                }
+                return true;
+            });
+
+            // Parse machine gestalt disabled traits (simple array of trait IDs)
+            const machineGestaltDisabledDefs = [];
+            for (const [id, data] of Object.entries(parsedRoboticTraits)) {
+                // Skip traits with initial = no
+                if (data.initial === false || data.initial === 'no') {
+                    continue;
+                }
+                
+                // Check if trait has forbidden_ethics containing ethic_gestalt_consciousness
+                if (data.forbidden_ethics) {
+                    const forbiddenEthics = Array.isArray(data.forbidden_ethics) ? data.forbidden_ethics : [data.forbidden_ethics];
+                    if (forbiddenEthics.includes('ethic_gestalt_consciousness')) {
+                        machineGestaltDisabledDefs.push(id);
+                    }
+                }
+            }
+
+            // Parse machine background traits (cost = 0)
+            const machineBackgroundTraits = [];
+            for (const [id, data] of Object.entries(parsedRoboticTraits)) {
+                if (data.initial === false || data.initial === 'no') {
+                    continue;
+                }
+                
+                let isFree = false;
+                if (data.cost !== undefined) {
+                    if (typeof data.cost === 'number') {
+                        isFree = data.cost === 0;
+                    } else if (typeof data.cost === 'object' && data.cost.base !== undefined) {
+                        isFree = parseInt(data.cost.base) === 0;
+                    }
+                }
+                
+                if (isFree) {
+                    machineBackgroundTraits.push(id);
+                }
+            }
+
+            // Parse machine ocean traits (trait_robot_aquatic)
+            const machineOceanTraitsDefs = traitsBuilder.build(parsedBasicChar, (id, data) => {
+                return id === 'trait_robot_aquatic';
+            });
+            
+            // Add hardcoded incompatibility with trait_cave_dweller
+            if (machineOceanTraitsDefs['trait_robot_aquatic']) {
+                if (!machineOceanTraitsDefs['trait_robot_aquatic'].no.includes('trait_cave_dweller')) {
+                    machineOceanTraitsDefs['trait_robot_aquatic'].no.push('trait_cave_dweller');
+                }
+            }
+
+            // Parse leader traits from 00_starting_ruler_traits.txt
+            const leaderTraitsFile = zip.files['common/traits/00_starting_ruler_traits.txt'];
+            const parsedLeaderTraits = leaderTraitsFile ? await parser.parseFile(leaderTraitsFile) : {};
+            
+            const leaderTraitsDefs = {};
+            
+            for (const [id, data] of Object.entries(parsedLeaderTraits)) {
+                // Filter for traits with starting_ruler_trait = yes
+                if (data.starting_ruler_trait !== true && data.starting_ruler_trait !== 'yes') {
+                    continue;
+                }
+                
+                // Skip traits with initial = no
+                if (data.initial === false || data.initial === 'no') {
+                    continue;
+                }
+                
+                // Extract cost
+                let cost = 0;
+                if (data.cost !== undefined) {
+                    if (typeof data.cost === 'number') {
+                        cost = data.cost;
+                    } else if (typeof data.cost === 'object' && data.cost.base !== undefined) {
+                        cost = parseInt(data.cost.base);
+                    } else {
+                        cost = parseInt(data.cost);
+                    }
+                }
+                
+                // Extract leader_class
+                const leaderClasses = [];
+                if (data.leader_class) {
+                    if (typeof data.leader_class === 'string') {
+                        leaderClasses.push(data.leader_class);
+                    } else if (Array.isArray(data.leader_class)) {
+                        leaderClasses.push(...data.leader_class);
+                    }
+                }
+                
+                // Extract allowed_ethics
+                const allowedEthics = [];
+                if (data.allowed_ethics) {
+                    if (typeof data.allowed_ethics === 'string') {
+                        allowedEthics.push(data.allowed_ethics);
+                    } else if (Array.isArray(data.allowed_ethics)) {
+                        allowedEthics.push(...data.allowed_ethics);
+                    }
+                }
+                
+                leaderTraitsDefs[id] = {
+                    cost: cost,
+                    yes: {
+                        class: leaderClasses,
+                        ethics: allowedEthics
+                    }
+                };
+            }
+
+            // Parse paragon traits from 10_paragon_traits.txt
+            const paragonTraitsFile = zip.files['common/traits/10_paragon_traits.txt'];
+            const parsedParagonTraits = paragonTraitsFile ? await parser.parseFile(paragonTraitsFile) : {};
+            
+            const paragonTraitsDefs = {};
+            const badParagonTraitsDefs = {};
+            
+            for (const [id, data] of Object.entries(parsedParagonTraits)) {
+                // Filter for traits with starting_ruler_trait = yes
+                if (data.starting_ruler_trait !== true && data.starting_ruler_trait !== 'yes') {
+                    continue;
+                }
+                
+                // Extract cost
+                let cost = 0;
+                if (data.cost !== undefined) {
+                    if (typeof data.cost === 'number') {
+                        cost = data.cost;
+                    } else if (typeof data.cost === 'object' && data.cost.base !== undefined) {
+                        cost = parseInt(data.cost.base);
+                    } else {
+                        cost = parseInt(data.cost);
+                    }
+                }
+                
+                // Extract leader_class
+                const leaderClasses = [];
+                if (data.leader_class) {
+                    if (typeof data.leader_class === 'string') {
+                        leaderClasses.push(data.leader_class);
+                    } else if (Array.isArray(data.leader_class)) {
+                        leaderClasses.push(...data.leader_class);
+                    }
+                }
+                
+                // Extract allowed_ethics
+                const allowedEthics = [];
+                if (data.allowed_ethics) {
+                    if (typeof data.allowed_ethics === 'string') {
+                        allowedEthics.push(data.allowed_ethics);
+                    } else if (Array.isArray(data.allowed_ethics)) {
+                        allowedEthics.push(...data.allowed_ethics);
+                    }
+                }
+                
+                const traitDef = {
+                    cost: cost,
+                    yes: {
+                        class: leaderClasses,
+                        ethics: allowedEthics
+                    }
+                };
+                
+                // Separate by cost: positive (1+) goes to paragon, negative goes to bad paragon
+                if (cost >= 1) {
+                    paragonTraitsDefs[id] = traitDef;
+                } else if (cost < 0) {
+                    badParagonTraitsDefs[id] = traitDef;
+                }
+            }
+
+            // Parse treasure hunter traits from 14_grand_archive_traits.txt
+            const treasureHunterTraitsFile = zip.files['common/traits/14_grand_archive_traits.txt'];
+            const parsedTreasureHunterTraits = treasureHunterTraitsFile ? await parser.parseFile(treasureHunterTraitsFile) : {};
+            
+            const treasureHunterTraitsDefs = {};
+            
+            for (const [id, data] of Object.entries(parsedTreasureHunterTraits)) {
+                // Filter for traits with starting_ruler_trait = yes
+                if (data.starting_ruler_trait !== true && data.starting_ruler_trait !== 'yes') {
+                    continue;
+                }
+                
+                // Extract cost
+                let cost = 0;
+                if (data.cost !== undefined) {
+                    if (typeof data.cost === 'number') {
+                        cost = data.cost;
+                    } else if (typeof data.cost === 'object' && data.cost.base !== undefined) {
+                        cost = parseInt(data.cost.base);
+                    } else {
+                        cost = parseInt(data.cost);
+                    }
+                }
+                
+                // Extract leader_class
+                const leaderClasses = [];
+                if (data.leader_class) {
+                    if (typeof data.leader_class === 'string') {
+                        leaderClasses.push(data.leader_class);
+                    } else if (Array.isArray(data.leader_class)) {
+                        leaderClasses.push(...data.leader_class);
+                    }
+                }
+                
+                // Extract allowed_ethics
+                const allowedEthics = [];
+                if (data.allowed_ethics) {
+                    if (typeof data.allowed_ethics === 'string') {
+                        allowedEthics.push(data.allowed_ethics);
+                    } else if (Array.isArray(data.allowed_ethics)) {
+                        allowedEthics.push(...data.allowed_ethics);
+                    }
+                }
+                
+                treasureHunterTraitsDefs[id] = {
+                    cost: cost,
+                    yes: {
+                        class: leaderClasses,
+                        ethics: allowedEthics
+                    }
+                };
+            }
+
+            const incompatiblePathogenic = [];
+            if (parsedMachineAgeTraits['trait_pathogenic_genes']) {
+                const pathogenicGenes = parsedMachineAgeTraits['trait_pathogenic_genes'];
+                if (pathogenicGenes.opposites) {
+                    const opposites = Array.isArray(pathogenicGenes.opposites) 
+                        ? pathogenicGenes.opposites 
+                        : [pathogenicGenes.opposites];
+                    incompatiblePathogenic.push(...opposites);
+                }
+            }
+
+            // Combine all 15 trait objects into one output
+            const allTraitsEl = document.getElementById('allTraitsOutput');
+            let allTraitsOutput = '';
+            allTraitsOutput += "basegame_traits = " + JSON.stringify(traitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_plant_traits = " + JSON.stringify(plantTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_lithoid_traits = " + JSON.stringify(lithoidTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "ocean_traits = " + JSON.stringify(oceanTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_overtuned_traits = " + JSON.stringify(overtunedTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "syncretic_disabled_traits = " + JSON.stringify(syncreticDisabledTraits, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_machine_traits = " + JSON.stringify(machineTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "machine_gestalt_disabled_traits = " + JSON.stringify(machineGestaltDisabledDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_machine_background_traits = " + JSON.stringify(machineBackgroundTraits, null, 2) + "\n\n";
+            allTraitsOutput += "machine_ocean_traits = " + JSON.stringify(machineOceanTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_leader_traits = " + JSON.stringify(leaderTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_paragon_traits = " + JSON.stringify(paragonTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_bad_paragon_traits = " + JSON.stringify(badParagonTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_treasure_hunter_traits = " + JSON.stringify(treasureHunterTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "incompatible_pathogenic = " + JSON.stringify(incompatiblePathogenic, null, 2);
+            allTraitsEl.textContent = allTraitsOutput;
+
+            // Enable the Download All button after successful processing
+            document.getElementById('downloadAllBtn').disabled = false;
+
+        } catch (error) {
+            outputEl.textContent = "Error: " + error.message;
+        }
+
+        // Handle copy buttons
+        document.querySelectorAll('.copyBtn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-target');
+                const pre = document.getElementById(targetId);
+                if (pre) {
+                    navigator.clipboard.writeText(pre.textContent)
+                        .then(() => {
+                            btn.textContent = "Copied!";
+                            setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+                        })
+                        .catch(err => {
+                            console.error("Clipboard error:", err);
+                        });
+                }
+            });
+        });
+
+        // Handle download buttons
+        document.querySelectorAll('.downloadBtn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-target');
+                const filename = btn.getAttribute('data-filename');
+                const pre = document.getElementById(targetId);
+                if (pre) {
+                    const content = pre.textContent;
+                    const blob = new Blob([content], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    btn.textContent = "Downloaded!";
+                    setTimeout(() => { btn.textContent = "Download"; }, 2500);
+                }
+            });
+        });
+
+    });
+
+    // Handle download all button
+    document.getElementById('downloadAllBtn').addEventListener('click', () => {
+        const downloads = [
+            { id: 'ethicsOutput', filename: 'ethics.js' },
+            { id: 'allCivicsOutput', filename: 'civics.js' },
+            { id: 'originsOutput', filename: 'origins.js' },
+            { id: 'allTraitsOutput', filename: 'traits.js' }
+        ];
+
+        downloads.forEach((download, index) => {
+            const pre = document.getElementById(download.id);
+            if (pre && pre.textContent && !pre.textContent.startsWith('No ')) {
+                setTimeout(() => {
+                    const content = pre.textContent;
+                    const blob = new Blob([content], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = download.filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, index * 100);
+            }
+        });
+
+        const btn = document.getElementById('downloadAllBtn');
+        btn.textContent = "Downloaded All!";
+        setTimeout(() => { btn.textContent = "Download All"; }, 2500);
+    });
+</script>
+
+</body>
+</html>
