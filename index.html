@@ -23,42 +23,42 @@
 </div>
 
 <div class="sections-grid">
-<section
->
-    <h2>Ethics</h2>
-    <div class="button-group">
-        <button class="copyBtn" data-target="ethicsOutput">Copy</button>
-        <button class="downloadBtn" data-target="ethicsOutput" data-filename="ethics.js">Download</button>
-    </div>
-    <pre id="ethicsOutput">No ethics yet.</pre>
-</section>
+    <section
+    >
+        <h2>Ethics</h2>
+        <div class="button-group">
+            <button class="copyBtn" data-target="ethicsOutput">Copy</button>
+            <button class="downloadBtn" data-target="ethicsOutput" data-filename="ethics.js">Download</button>
+        </div>
+        <pre id="ethicsOutput">No ethics yet.</pre>
+    </section>
 
-<section>
-    <h2>Civics</h2>
-    <div class="button-group">
-        <button class="copyBtn" data-target="allCivicsOutput">Copy</button>
-        <button class="downloadBtn" data-target="allCivicsOutput" data-filename="civics.js">Download</button>
-    </div>
-    <pre id="allCivicsOutput">No civics yet.</pre>
-</section>
+    <section>
+        <h2>Civics</h2>
+        <div class="button-group">
+            <button class="copyBtn" data-target="allCivicsOutput">Copy</button>
+            <button class="downloadBtn" data-target="allCivicsOutput" data-filename="civics.js">Download</button>
+        </div>
+        <pre id="allCivicsOutput">No civics yet.</pre>
+    </section>
 
-<section>
-    <h2>Origins</h2>
-    <div class="button-group">
-        <button class="copyBtn" data-target="originsOutput">Copy</button>
-        <button class="downloadBtn" data-target="originsOutput" data-filename="origins.js">Download</button>
-    </div>
-    <pre id="originsOutput">No origins yet.</pre>
-</section>
+    <section>
+        <h2>Origins</h2>
+        <div class="button-group">
+            <button class="copyBtn" data-target="originsOutput">Copy</button>
+            <button class="downloadBtn" data-target="originsOutput" data-filename="origins.js">Download</button>
+        </div>
+        <pre id="originsOutput">No origins yet.</pre>
+    </section>
 
-<section>
-    <h2>Traits</h2>
-    <div class="button-group">
-        <button class="copyBtn" data-target="allTraitsOutput">Copy</button>
-        <button class="downloadBtn" data-target="allTraitsOutput" data-filename="traits.js">Download</button>
-    </div>
-    <pre id="allTraitsOutput">No traits yet.</pre>
-</section>
+    <section>
+        <h2>Traits</h2>
+        <div class="button-group">
+            <button class="copyBtn" data-target="allTraitsOutput">Copy</button>
+            <button class="downloadBtn" data-target="allTraitsOutput" data-filename="traits.js">Download</button>
+        </div>
+        <pre id="allTraitsOutput">No traits yet.</pre>
+    </section>
 </div>
 
 <script>
@@ -78,10 +78,10 @@
             const parser = new ParadoxParser();
 
             const ethicsFile = zip.files['common/ethics/00_ethics.txt'];
-            const authFile   = zip.files['common/governments/authorities/00_authorities.txt'];
+            const authFile = zip.files['common/governments/authorities/00_authorities.txt'];
 
             const parsedEthics = ethicsFile ? await parser.parseFile(ethicsFile) : {};
-            const parsedAuths  = authFile   ? await parser.parseFile(authFile)   : {};
+            const parsedAuths = authFile ? await parser.parseFile(authFile) : {};
             const builder = new EthicsBuilder();
             const ethicsDefs = builder.build(parsedEthics, parsedAuths);
 
@@ -95,7 +95,7 @@
             // Parse hive civics from 02_gestalt_civics.txt
             const gestaltFile = zip.files['common/governments/civics/02_gestalt_civics.txt'];
             const parsedGestalt = gestaltFile ? await parser.parseFile(gestaltFile) : {};
-            
+
             // Filter for civics with "hive" in the name
             const hiveCivicsDefs = civicsBuilder.build(parsedGestalt, (civicName) => {
                 return civicName.toLowerCase().includes('hive');
@@ -110,7 +110,7 @@
             // Parse corporate civics from 03_corporate_civics.txt
             const corporateFile = zip.files['common/governments/civics/03_corporate_civics.txt'];
             const parsedCorporate = corporateFile ? await parser.parseFile(corporateFile) : {};
-            
+
             // No filter needed - all civics in this file are corporate
             const corporateCivicsDefs = civicsBuilder.build(parsedCorporate);
 
@@ -120,11 +120,11 @@
                 if (civicName.toLowerCase().includes('individual')) {
                     return true;
                 }
-                
+
                 // Check if requires MACHINE species_archetype AND forbids gestalt consciousness
                 let requiresMachine = false;
                 let forbidsGestalt = false;
-                
+
                 // Check potential block
                 if (civicData.potential) {
                     if (civicData.potential.species_archetype) {
@@ -146,7 +146,7 @@
                         }
                     }
                 }
-                
+
                 // Check possible block
                 if (civicData.possible) {
                     if (civicData.possible.species_archetype) {
@@ -168,19 +168,19 @@
                         }
                     }
                 }
-                
+
                 return requiresMachine && forbidsGestalt;
             };
-            
+
             // Parse individualistic machines
             const individualisticFromBaseline = Object.entries(parsedCivics)
                 .filter(([civicName, civicData]) => isIndividualisticMachine(civicName, civicData))
                 .map(([civicName]) => civicName);
-            
+
             const individualisticFromCorporate = Object.entries(parsedCorporate)
                 .filter(([civicName, civicData]) => isIndividualisticMachine(civicName, civicData))
                 .map(([civicName]) => civicName);
-            
+
             // Merge both arrays and remove duplicates
             const individualisticMachines = [...new Set([...individualisticFromBaseline, ...individualisticFromCorporate])];
 
@@ -197,28 +197,36 @@
             // Parse trait files first (needed for origins trait inheritance)
             const traitsFile = zip.files['common/traits/04_species_traits.txt'];
             const parsedTraits = traitsFile ? await parser.parseFile(traitsFile) : {};
-            
+
             // Parse basic characteristics traits
             const basicCharFile = zip.files['common/traits/02_species_traits_basic_characteristics.txt'];
             const parsedBasicChar = basicCharFile ? await parser.parseFile(basicCharFile) : {};
-            
+
             // Parse robotic traits
             const roboticTraitsFile = zip.files['common/traits/05_species_traits_robotic.txt'];
             const parsedRoboticTraits = roboticTraitsFile ? await parser.parseFile(roboticTraitsFile) : {};
-            
+
             // Parse toxoid traits
             const toxTraitsFile = zip.files['common/traits/09_tox_traits.txt'];
             const parsedToxTraits = toxTraitsFile ? await parser.parseFile(toxTraitsFile) : {};
-            
+
+            // Parse first contact traits
+            const firstContactTraitsFile = zip.files['common/traits/11_first_contact_traits.txt'];
+            const parsedFirstContactTraits = firstContactTraitsFile ? await parser.parseFile(firstContactTraitsFile) : {};
+
             // Parse machine age traits
             const machineAgeTraitsFile = zip.files['common/traits/13_machine_age_traits.txt'];
             const parsedMachineAgeTraits = machineAgeTraitsFile ? await parser.parseFile(machineAgeTraitsFile) : {};
+
+            // Parse biogenesis traits
+            const biogenesisTraitsFile = zip.files['common/traits/15_biogenesis_species_traits.txt'];
+            const parsedBiogenesisTraits = biogenesisTraitsFile ? await parser.parseFile(biogenesisTraitsFile) : {};
 
             // Parse origins from 00_origins.txt
             const originsEl = document.getElementById('originsOutput');
             const originsFile = zip.files['common/governments/civics/00_origins.txt'];
             const parsedOrigins = originsFile ? await parser.parseFile(originsFile) : {};
-            
+
             // Create traits lookup map for origin trait inheritance
             // This allows origins to inherit requirements from force-added traits
             const traitsLookup = {
@@ -226,9 +234,11 @@
                 ...parsedTraits,
                 ...parsedRoboticTraits,
                 ...parsedToxTraits,
-                ...parsedMachineAgeTraits
+                ...parsedMachineAgeTraits,
+                ...parsedFirstContactTraits,
+                ...parsedBiogenesisTraits,
             };
-            
+
             // Collect all civic files for origin incompatibility checking
             // This allows origins to find civics that forbid them
             const civicsFilesForOrigins = [
@@ -245,34 +255,39 @@
 
             // Continue with traits processing
             const traitsBuilder = new TraitsBuilder();
-            
-            // Merge ALL trait files first to enable cross-file bidirectional incompatibilities
-            const mergedParsedTraits = { 
-                ...parsedBasicChar,
-                ...parsedTraits, 
-                ...parsedToxTraits,
-                ...parsedMachineAgeTraits
-            };
-            
+
             // Apply bidirectional incompatibilities to the merged data
             // This ensures cross-file incompatibilities work (e.g., trait_pathogenic_genes <-> trait_rapid_breeders)
-            traitsBuilder.applyBidirectionalToParsedData(mergedParsedTraits);
-            
-            // Filter for traits WITHOUT species_class AND not ONLY for lithoids
-            // This includes traits with allowed_archetypes = { BIOLOGICAL LITHOID }
-            // Also exclude traits with allowed_origins (those go to overtuned_traits)
-            const traitsDefs = traitsBuilder.build(mergedParsedTraits, (id, data) => {
+            traitsBuilder.applyBidirectionalToParsedData(traitsLookup);
+
+            // Baseline traits
+            const basegameTraitDefs = traitsBuilder.build(traitsLookup, (id, data) => {
                 // Exclude traits with allowed_origins
                 if (data.allowed_origins) {
                     return false;
                 }
-                // Include traits without species_class AND not ONLY for lithoids
-                return !data.species_class && !traitsBuilder.isOnlyForArchetypes(data, ['LITHOID']);
-            });
 
-            // Parse plant/fungoid traits (species_class = PLANT or FUN)
-            const plantTraitsDefs = traitsBuilder.build(parsedTraits, (id, data) => {
-                return traitsBuilder.hasSpeciesClass(data, ['PLANT', 'FUN']);
+                // Exclude traits like 'trait_organic' and 'trait_lithoid'
+                if (data.cost === 0) {
+                    return false;
+                }
+
+                // Exclude machine traits from baseline
+                if (traitsBuilder.hasAllowedArchetype(data, 'MACHINE')) {
+                    return false;
+                }
+
+                // Exclude lithoid-only traits from
+                if (traitsBuilder.isOnlyForArchetypes(data, ['LITHOID'])) {
+                    return false;
+                }
+
+                // Defined in oceanTraitsDefs
+                if (id === 'trait_aquatic') {
+                    return false;
+                }
+
+                return true;
             });
 
             // Parse lithoid traits (allowed_archetypes includes LITHOID)
@@ -282,14 +297,14 @@
                 if (!traitsBuilder.hasAllowedArchetype(data, 'LITHOID')) {
                     return false;
                 }
-                
+
                 // If species_class exists, it must either be empty or include LITHOID
                 if (data.species_class) {
                     const speciesClasses = Array.isArray(data.species_class) ? data.species_class : [data.species_class];
                     // Check if LITHOID is in the species_class list
                     return speciesClasses.includes('LITHOID');
                 }
-                
+
                 // No species_class restriction, so it's valid for lithoids
                 return true;
             });
@@ -297,7 +312,7 @@
             const oceanTraitsDefs = traitsBuilder.build(parsedBasicChar, (id, data) => {
                 return id === 'trait_aquatic';
             });
-            
+
             // Add hardcoded incompatibility with trait_cave_dweller
             if (oceanTraitsDefs['trait_aquatic']) {
                 if (!oceanTraitsDefs['trait_aquatic'].no.includes('trait_cave_dweller')) {
@@ -319,8 +334,8 @@
             if (parsedBasicChar['trait_syncretic_proles']) {
                 const syncreticProles = parsedBasicChar['trait_syncretic_proles'];
                 if (syncreticProles.opposites) {
-                    const opposites = Array.isArray(syncreticProles.opposites) 
-                        ? syncreticProles.opposites 
+                    const opposites = Array.isArray(syncreticProles.opposites)
+                        ? syncreticProles.opposites
                         : [syncreticProles.opposites];
                     syncreticDisabledTraits.push(...opposites);
                 }
@@ -345,7 +360,7 @@
                 if (data.initial === false || data.initial === 'no') {
                     continue;
                 }
-                
+
                 // Check if trait has forbidden_ethics containing ethic_gestalt_consciousness
                 if (data.forbidden_ethics) {
                     const forbiddenEthics = Array.isArray(data.forbidden_ethics) ? data.forbidden_ethics : [data.forbidden_ethics];
@@ -361,7 +376,7 @@
                 if (data.initial === false || data.initial === 'no') {
                     continue;
                 }
-                
+
                 let isFree = false;
                 if (data.cost !== undefined) {
                     if (typeof data.cost === 'number') {
@@ -370,7 +385,7 @@
                         isFree = parseInt(data.cost.base) === 0;
                     }
                 }
-                
+
                 if (isFree) {
                     machineBackgroundTraits.push(id);
                 }
@@ -380,7 +395,7 @@
             const machineOceanTraitsDefs = traitsBuilder.build(parsedBasicChar, (id, data) => {
                 return id === 'trait_robot_aquatic';
             });
-            
+
             // Add hardcoded incompatibility with trait_cave_dweller
             if (machineOceanTraitsDefs['trait_robot_aquatic']) {
                 if (!machineOceanTraitsDefs['trait_robot_aquatic'].no.includes('trait_cave_dweller')) {
@@ -391,20 +406,20 @@
             // Parse leader traits from 00_starting_ruler_traits.txt
             const leaderTraitsFile = zip.files['common/traits/00_starting_ruler_traits.txt'];
             const parsedLeaderTraits = leaderTraitsFile ? await parser.parseFile(leaderTraitsFile) : {};
-            
+
             const leaderTraitsDefs = {};
-            
+
             for (const [id, data] of Object.entries(parsedLeaderTraits)) {
                 // Filter for traits with starting_ruler_trait = yes
                 if (data.starting_ruler_trait !== true && data.starting_ruler_trait !== 'yes') {
                     continue;
                 }
-                
+
                 // Skip traits with initial = no
                 if (data.initial === false || data.initial === 'no') {
                     continue;
                 }
-                
+
                 // Extract cost
                 let cost = 0;
                 if (data.cost !== undefined) {
@@ -416,7 +431,7 @@
                         cost = parseInt(data.cost);
                     }
                 }
-                
+
                 // Extract leader_class
                 const leaderClasses = [];
                 if (data.leader_class) {
@@ -426,7 +441,7 @@
                         leaderClasses.push(...data.leader_class);
                     }
                 }
-                
+
                 // Extract allowed_ethics
                 const allowedEthics = [];
                 if (data.allowed_ethics) {
@@ -436,7 +451,7 @@
                         allowedEthics.push(...data.allowed_ethics);
                     }
                 }
-                
+
                 leaderTraitsDefs[id] = {
                     cost: cost,
                     yes: {
@@ -449,16 +464,16 @@
             // Parse paragon traits from 10_paragon_traits.txt
             const paragonTraitsFile = zip.files['common/traits/10_paragon_traits.txt'];
             const parsedParagonTraits = paragonTraitsFile ? await parser.parseFile(paragonTraitsFile) : {};
-            
+
             const paragonTraitsDefs = {};
             const badParagonTraitsDefs = {};
-            
+
             for (const [id, data] of Object.entries(parsedParagonTraits)) {
                 // Filter for traits with starting_ruler_trait = yes
                 if (data.starting_ruler_trait !== true && data.starting_ruler_trait !== 'yes') {
                     continue;
                 }
-                
+
                 // Extract cost
                 let cost = 0;
                 if (data.cost !== undefined) {
@@ -470,7 +485,7 @@
                         cost = parseInt(data.cost);
                     }
                 }
-                
+
                 // Extract leader_class
                 const leaderClasses = [];
                 if (data.leader_class) {
@@ -480,7 +495,7 @@
                         leaderClasses.push(...data.leader_class);
                     }
                 }
-                
+
                 // Extract allowed_ethics
                 const allowedEthics = [];
                 if (data.allowed_ethics) {
@@ -490,7 +505,7 @@
                         allowedEthics.push(...data.allowed_ethics);
                     }
                 }
-                
+
                 const traitDef = {
                     cost: cost,
                     yes: {
@@ -498,7 +513,7 @@
                         ethics: allowedEthics
                     }
                 };
-                
+
                 // Separate by cost: positive (1+) goes to paragon, negative goes to bad paragon
                 if (cost >= 1) {
                     paragonTraitsDefs[id] = traitDef;
@@ -510,15 +525,15 @@
             // Parse treasure hunter traits from 14_grand_archive_traits.txt
             const treasureHunterTraitsFile = zip.files['common/traits/14_grand_archive_traits.txt'];
             const parsedTreasureHunterTraits = treasureHunterTraitsFile ? await parser.parseFile(treasureHunterTraitsFile) : {};
-            
+
             const treasureHunterTraitsDefs = {};
-            
+
             for (const [id, data] of Object.entries(parsedTreasureHunterTraits)) {
                 // Filter for traits with starting_ruler_trait = yes
                 if (data.starting_ruler_trait !== true && data.starting_ruler_trait !== 'yes') {
                     continue;
                 }
-                
+
                 // Extract cost
                 let cost = 0;
                 if (data.cost !== undefined) {
@@ -530,7 +545,7 @@
                         cost = parseInt(data.cost);
                     }
                 }
-                
+
                 // Extract leader_class
                 const leaderClasses = [];
                 if (data.leader_class) {
@@ -540,7 +555,7 @@
                         leaderClasses.push(...data.leader_class);
                     }
                 }
-                
+
                 // Extract allowed_ethics
                 const allowedEthics = [];
                 if (data.allowed_ethics) {
@@ -550,7 +565,7 @@
                         allowedEthics.push(...data.allowed_ethics);
                     }
                 }
-                
+
                 treasureHunterTraitsDefs[id] = {
                     cost: cost,
                     yes: {
@@ -564,8 +579,8 @@
             if (parsedMachineAgeTraits['trait_pathogenic_genes']) {
                 const pathogenicGenes = parsedMachineAgeTraits['trait_pathogenic_genes'];
                 if (pathogenicGenes.opposites) {
-                    const opposites = Array.isArray(pathogenicGenes.opposites) 
-                        ? pathogenicGenes.opposites 
+                    const opposites = Array.isArray(pathogenicGenes.opposites)
+                        ? pathogenicGenes.opposites
                         : [pathogenicGenes.opposites];
                     incompatiblePathogenic.push(...opposites);
                 }
@@ -574,8 +589,7 @@
             // Combine all 15 trait objects into one output
             const allTraitsEl = document.getElementById('allTraitsOutput');
             let allTraitsOutput = '';
-            allTraitsOutput += "basegame_traits = " + JSON.stringify(traitsDefs, null, 2) + "\n\n";
-            allTraitsOutput += "basegame_plant_traits = " + JSON.stringify(plantTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_traits = " + JSON.stringify(basegameTraitDefs, null, 2) + "\n\n";
             allTraitsOutput += "basegame_lithoid_traits = " + JSON.stringify(lithoidTraitsDefs, null, 2) + "\n\n";
             allTraitsOutput += "ocean_traits = " + JSON.stringify(oceanTraitsDefs, null, 2) + "\n\n";
             allTraitsOutput += "basegame_overtuned_traits = " + JSON.stringify(overtunedTraitsDefs, null, 2) + "\n\n";
@@ -607,7 +621,9 @@
                     navigator.clipboard.writeText(pre.textContent)
                         .then(() => {
                             btn.textContent = "Copied!";
-                            setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+                            setTimeout(() => {
+                                btn.textContent = "Copy";
+                            }, 1500);
                         })
                         .catch(err => {
                             console.error("Clipboard error:", err);
@@ -624,7 +640,7 @@
                 const pre = document.getElementById(targetId);
                 if (pre) {
                     const content = pre.textContent;
-                    const blob = new Blob([content], { type: 'text/plain' });
+                    const blob = new Blob([content], {type: 'text/plain'});
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -633,9 +649,11 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-                    
+
                     btn.textContent = "Downloaded!";
-                    setTimeout(() => { btn.textContent = "Download"; }, 2500);
+                    setTimeout(() => {
+                        btn.textContent = "Download";
+                    }, 2500);
                 }
             });
         });
@@ -645,10 +663,10 @@
     // Handle download all button
     document.getElementById('downloadAllBtn').addEventListener('click', () => {
         const downloads = [
-            { id: 'ethicsOutput', filename: 'ethics.js' },
-            { id: 'allCivicsOutput', filename: 'civics.js' },
-            { id: 'originsOutput', filename: 'origins.js' },
-            { id: 'allTraitsOutput', filename: 'traits.js' }
+            {id: 'ethicsOutput', filename: 'ethics.js'},
+            {id: 'allCivicsOutput', filename: 'civics.js'},
+            {id: 'originsOutput', filename: 'origins.js'},
+            {id: 'allTraitsOutput', filename: 'traits.js'}
         ];
 
         downloads.forEach((download, index) => {
@@ -656,7 +674,7 @@
             if (pre && pre.textContent && !pre.textContent.startsWith('No ')) {
                 setTimeout(() => {
                     const content = pre.textContent;
-                    const blob = new Blob([content], { type: 'text/plain' });
+                    const blob = new Blob([content], {type: 'text/plain'});
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -671,7 +689,9 @@
 
         const btn = document.getElementById('downloadAllBtn');
         btn.textContent = "Downloaded All!";
-        setTimeout(() => { btn.textContent = "Download All"; }, 2500);
+        setTimeout(() => {
+            btn.textContent = "Download All";
+        }, 2500);
     });
 </script>
 
