@@ -246,13 +246,17 @@
             // Continue with traits processing
             const traitsBuilder = new TraitsBuilder();
             
-            // Apply bidirectional incompatibilities to the full parsed data BEFORE filtering
-            // This ensures that traits filtered into different categories still have correct bidirectional opposites
-            traitsBuilder.applyBidirectionalToParsedData(parsedTraits);
-            traitsBuilder.applyBidirectionalToParsedData(parsedToxTraits);
+            // Merge ALL trait files first to enable cross-file bidirectional incompatibilities
+            const mergedParsedTraits = { 
+                ...parsedBasicChar,
+                ...parsedTraits, 
+                ...parsedToxTraits,
+                ...parsedMachineAgeTraits
+            };
             
-            // Merge parsed data from both files
-            const mergedParsedTraits = { ...parsedTraits, ...parsedToxTraits };
+            // Apply bidirectional incompatibilities to the merged data
+            // This ensures cross-file incompatibilities work (e.g., trait_pathogenic_genes <-> trait_rapid_breeders)
+            traitsBuilder.applyBidirectionalToParsedData(mergedParsedTraits);
             
             // Filter for traits WITHOUT species_class AND not ONLY for lithoids
             // This includes traits with allowed_archetypes = { BIOLOGICAL LITHOID }
