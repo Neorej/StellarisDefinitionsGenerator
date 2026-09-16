@@ -15,9 +15,12 @@
 <body>
 <h1>Stellaris Definition Generator</h1>
 <div class="controls">
-    <p>A tool for generating definitions for the <a href="https://github.com/Neorej/StellarisEmpireGenerator" target="_blank" rel="noopener noreferrer">Stellaris Empire Generator</a>.</p>
-    <label for="fileUpload">Zip the Stellaris "common" directory and upload it here to extract ethics, civics, origins, and traits definitions.</label><br>
-    <input type="file" id="fileUpload" accept=".zip" />
+    <p>A tool for generating definitions for the <a href="https://github.com/Neorej/StellarisEmpireGenerator"
+                                                    target="_blank" rel="noopener noreferrer">Stellaris Empire
+        Generator</a>.</p>
+    <label for="fileUpload">Zip the Stellaris "common" directory and upload it here to extract ethics, civics, origins,
+        and traits definitions.</label><br>
+    <input type="file" id="fileUpload" accept=".zip"/>
     <button id="processBtn">Process ZIP</button>
     <button id="downloadAllBtn" disabled>Download All</button>
 </div>
@@ -222,6 +225,27 @@
             const biogenesisTraitsFile = zip.files['common/traits/15_biogenesis_species_traits.txt'];
             const parsedBiogenesisTraits = biogenesisTraitsFile ? await parser.parseFile(biogenesisTraitsFile) : {};
 
+            // Parse infernals traits
+            const infernalsTraitsFile = zip.files['common/traits/16_infernals_traits.txt'];
+            const parsedInfernalsTraits = infernalsTraitsFile ? await parser.parseFile(infernalsTraitsFile) : {};
+
+            // Parse nomads traits
+            const nomadsTraitsFile = zip.files['common/traits/18_nomads_species_traits.txt'];
+            const parsedNomadsTraits = nomadsTraitsFile ? await parser.parseFile(nomadsTraitsFile) : {};
+
+            // Parse cyborg traits, which are only offered with origin_unplugged or
+            // civic_augmentation_bazaars, so they get a pool of their own
+            const cyborgTraitsFile = zip.files['common/traits/10_species_traits_cyborg.txt'];
+            const parsedCyborgTraits = cyborgTraitsFile ? await parser.parseFile(cyborgTraitsFile) : {};
+
+            // Parse habitability traits; only used to work out which traits a homeworld rules out
+            const habitabilityTraitsFile = zip.files['common/traits/01_species_traits_habitability.txt'];
+            const parsedHabitabilityTraits = habitabilityTraitsFile ? await parser.parseFile(habitabilityTraitsFile) : {};
+
+            // Parse unplugged traits; only used to look up the traits origin_unplugged force-adds
+            const unpluggedTraitsFile = zip.files['common/traits/15_unplugged_traits.txt'];
+            const parsedUnpluggedTraits = unpluggedTraitsFile ? await parser.parseFile(unpluggedTraitsFile) : {};
+
             // Parse origins from 00_origins.txt
             const originsEl = document.getElementById('originsOutput');
             const originsFile = zip.files['common/governments/civics/00_origins.txt'];
@@ -237,6 +261,8 @@
                 ...parsedMachineAgeTraits,
                 ...parsedFirstContactTraits,
                 ...parsedBiogenesisTraits,
+                ...parsedInfernalsTraits,
+                ...parsedNomadsTraits,
             };
 
             // Collect all civic files for origin incompatibility checking
@@ -248,8 +274,12 @@
             ];
 
             // Use OriginsBuilder which handles species_class (in addition to species_archetype)
+            // Origins can force-add traits that are never selectable, so they need a wider lookup
+            // than traitsLookup, which only holds the files the trait output is built from
+            const originTraitsLookup = {...traitsLookup, ...parsedUnpluggedTraits};
+
             const originsBuilder = new OriginsBuilder();
-            const originsDefs = originsBuilder.build(parsedOrigins, null, traitsLookup, civicsFilesForOrigins);
+            const originsDefs = originsBuilder.build(parsedOrigins, null, originTraitsLookup, civicsFilesForOrigins);
 
             originsEl.textContent = "basegame_origins = " + JSON.stringify(originsDefs, null, 2);
 
@@ -292,7 +322,7 @@
 
             // Parse lithoid traits (allowed_archetypes includes LITHOID)
             // BUT exclude traits with species_class that doesn't include LITHOID
-            const lithoidTraitsDefs = traitsBuilder.build(parsedTraits, (id, data) => {
+            const lithoidTraitsDefs = traitsBuilder.build({...parsedTraits, ...parsedInfernalsTraits, ...parsedNomadsTraits}, (id, data) => {
                 // Must have LITHOID in allowed_archetypes
                 if (!traitsBuilder.hasAllowedArchetype(data, 'LITHOID')) {
                     return false;
@@ -320,6 +350,11 @@
                 }
             }
 
+            // Parse cyborg traits from 10_species_traits_cyborg.txt
+            const cyborgTraitsDefs = traitsBuilder.build(parsedCyborgTraits, (id, data) => {
+                return data.category === 'cyborg';
+            });
+
             // Parse overtuned traits from 09_tox_traits.txt
             const overtunedTraitsDefs = traitsBuilder.build(parsedToxTraits, (id, data) => {
                 if (data.allowed_origins) {
@@ -341,8 +376,17 @@
                 }
             }
 
+            // The Infernals and Nomads files add machine traits of their own; only the
+            // MACHINE/ROBOT ones belong in the machine pool
+            const extraMachineTraits = {};
+            for (const [id, data] of Object.entries({...parsedInfernalsTraits, ...parsedNomadsTraits})) {
+                if (traitsBuilder.hasAllowedArchetype(data, ['MACHINE', 'ROBOT'])) {
+                    extraMachineTraits[id] = data;
+                }
+            }
+
             // Filter to exclude cost = 0 traits (background traits)
-            const machineTraitsDefs = traitsBuilder.build(parsedRoboticTraits, (id, data) => {
+            const machineTraitsDefs = traitsBuilder.build({...parsedRoboticTraits, ...extraMachineTraits}, (id, data) => {
                 if (data.cost !== undefined) {
                     if (typeof data.cost === 'number') {
                         return data.cost !== 0;
@@ -353,9 +397,11 @@
                 return true;
             });
 
-            // Parse machine gestalt disabled traits (simple array of trait IDs)
+            // Parse gestalt disabled traits (simple array of trait IDs)
+            // Scans every trait file, not just the robotic one: traits such as trait_familial
+            // and trait_reavers forbid gestalt consciousness too
             const machineGestaltDisabledDefs = [];
-            for (const [id, data] of Object.entries(parsedRoboticTraits)) {
+            for (const [id, data] of Object.entries(traitsLookup)) {
                 // Skip traits with initial = no
                 if (data.initial === false || data.initial === 'no') {
                     continue;
@@ -575,6 +621,23 @@
                 };
             }
 
+            // A species takes on the habitability preference trait of its homeworld, so the traits
+            // that preference opposes cannot be picked on that planet class
+            const planetClassDisabledTraits = {};
+            for (const [id, data] of Object.entries(parsedHabitabilityTraits)) {
+                if (!data || typeof data !== 'object' || !data.opposites) continue;
+
+                const planetClasses = data.bound_to_planet_classes
+                    ? (Array.isArray(data.bound_to_planet_classes) ? data.bound_to_planet_classes : [data.bound_to_planet_classes])
+                    : (data.ideal_planet_class ? [data.ideal_planet_class] : []);
+
+                const opposites = Array.isArray(data.opposites) ? data.opposites : [data.opposites];
+
+                for (const planetClass of planetClasses) {
+                    planetClassDisabledTraits[planetClass] = [...new Set([...(planetClassDisabledTraits[planetClass] || []), ...opposites])];
+                }
+            }
+
             const incompatiblePathogenic = [];
             if (parsedMachineAgeTraits['trait_pathogenic_genes']) {
                 const pathogenicGenes = parsedMachineAgeTraits['trait_pathogenic_genes'];
@@ -602,7 +665,9 @@
             allTraitsOutput += "basegame_paragon_traits = " + JSON.stringify(paragonTraitsDefs, null, 2) + "\n\n";
             allTraitsOutput += "basegame_bad_paragon_traits = " + JSON.stringify(badParagonTraitsDefs, null, 2) + "\n\n";
             allTraitsOutput += "basegame_treasure_hunter_traits = " + JSON.stringify(treasureHunterTraitsDefs, null, 2) + "\n\n";
-            allTraitsOutput += "incompatible_pathogenic = " + JSON.stringify(incompatiblePathogenic, null, 2);
+            allTraitsOutput += "incompatible_pathogenic = " + JSON.stringify(incompatiblePathogenic, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_cyborg_traits = " + JSON.stringify(cyborgTraitsDefs, null, 2) + "\n\n";
+            allTraitsOutput += "basegame_planet_class_disabled_traits = " + JSON.stringify(planetClassDisabledTraits, null, 2);
             allTraitsEl.textContent = allTraitsOutput;
 
             // Enable the Download All button after successful processing
